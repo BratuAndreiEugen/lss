@@ -6,6 +6,7 @@ import wave
 import random
 import argparse
 from collections import defaultdict
+import torchaudio
 
 def get_valid_wav_files(folder):
     """Returns a sorted list of valid audio files, ignoring hidden macOS metadata files."""
@@ -66,45 +67,34 @@ def main():
         orig_path = os.path.join(args.selected_folder, orig_filename)
         donor_path = os.path.join(args.full_dataset_folder, donor_filename)
 
-        with wave.open(orig_path, 'rb') as orig_wav, wave.open(donor_path, 'rb') as donor_wav:
-            params = orig_wav.getparams()
-            sample_rate = params.framerate
-            sampwidth = params.sampwidth
-            nchannels = params.nchannels
-            bytes_per_frame = sampwidth * nchannels
+        orig_wav, sample_rate = torchaudio.load(orig_path)
+        donor_wav, donor_sr = torchaudio.load(donor_path)
 
-            if (donor_wav.getframerate() != sample_rate or 
-                donor_wav.getsampwidth() != sampwidth or 
-                donor_wav.getnchannels() != nchannels):
-                raise ValueError(f"Audio format mismatch between {orig_filename} and {donor_filename}")
+        # Resample clean donor (16kHz) to match watermarked file (24kHz)
+        if donor_sr != sample_rate:
+            donor_wav = torchaudio.functional.resample(donor_wav, donor_sr, sample_rate)
 
-            orig_total_frames = orig_wav.getnframes()
-            donor_total_frames = donor_wav.getnframes()
-            frames_1s = sample_rate
+        orig_total_frames = orig_wav.shape[-1]
+        donor_total_frames = donor_wav.shape[-1]
+        frames_1s = sample_rate
 
-            if orig_total_frames < frames_1s or donor_total_frames < frames_1s:
-                raise ValueError(f"File shorter than 1 second: {orig_filename} or {donor_filename}")
+        if orig_total_frames < frames_1s or donor_total_frames < frames_1s:
+            raise ValueError(f"File shorter than 1 second: {orig_filename} or {donor_filename}")
 
-            orig_start_frame = random.randint(0, orig_total_frames - frames_1s)
-            orig_end_frame = orig_start_frame + frames_1s
+        orig_start_frame = random.randint(0, orig_total_frames - frames_1s)
+        orig_end_frame = orig_start_frame + frames_1s
 
-            donor_start_frame = random.randint(0, donor_total_frames - frames_1s)
-            donor_end_frame = donor_start_frame + frames_1s
+        donor_start_frame = random.randint(0, donor_total_frames - frames_1s)
+        donor_end_frame = donor_start_frame + frames_1s
 
-            orig_bytes = orig_wav.readframes(orig_total_frames)
-            donor_wav.setpos(donor_start_frame)
-            donor_1s_bytes = donor_wav.readframes(frames_1s)
+        tampered_wav = orig_wav.clone()
+        tampered_wav[:, orig_start_frame:orig_end_frame] = donor_wav[:, donor_start_frame:donor_end_frame]
 
-            byte_start = orig_start_frame * bytes_per_frame
-            byte_end = orig_end_frame * bytes_per_frame
-            tampered_bytes = orig_bytes[:byte_start] + donor_1s_bytes + orig_bytes[byte_end:]
-
-        tampered_id_name = f"tampered_{orig_filename}.wav"
+        # Keep original filename so LSS_detection.py derives the matching nonce (or strip "tampered_" in LSS_detection.py)
+        tampered_id_name = orig_filename
         tampered_path = os.path.join(args.output_folder, tampered_id_name)
 
-        with wave.open(tampered_path, 'wb') as out_wav:
-            out_wav.setparams(params)
-            out_wav.writeframes(tampered_bytes)
+        torchaudio.save(tampered_path, tampered_wav, sample_rate)
 
         records.append({
             "tampered_file_id": tampered_id_name,
