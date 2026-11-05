@@ -99,7 +99,7 @@ def main():
             byte_end = orig_end_frame * bytes_per_frame
             tampered_bytes = orig_bytes[:byte_start] + donor_1s_bytes + orig_bytes[byte_end:]
 
-        tampered_id_name = f"tampered_{idx:04d}_{speaker_id}.wav"
+        tampered_id_name = f"tampered_{orig_filename}.wav"
         tampered_path = os.path.join(args.output_folder, tampered_id_name)
 
         with wave.open(tampered_path, 'wb') as out_wav:
