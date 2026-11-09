@@ -41,7 +41,7 @@ batching:
 script:
   max_files: 100         # samples to estimate PCA basis with
   max_eval: 100        # samples used for evaluation
-  bits: "01011010"       # binary payload sequence to embed
+  bits: "01011010"      # binary payload sequence to embed
   payload_length: 8      # length of embedded payload with repetition factor x4
 
 modes:
@@ -49,15 +49,15 @@ modes:
   save_manipulated_wav: false
   wrong_key_eval: false
 
-  fit_pca: false
+  fit_pca: true
   eval_mode: true
 
   load_pca: true   # Set to true to save new stats to 'pca_save_dir'
-  save_pca: false   # Set to true to save new stats to 'pca_save_dir'
+  save_pca: true  # Set to true to save new stats to 'pca_save_dir'
 
 run_lss:
   #audio_proc_attack: "lowpass"      # alias of default_attack, but local override is allowed
-  key: ""             # expects type=str; LSS secret key (correct)
+  key: "0123456789abcdef0123456789abcdef"            # expects type=str; LSS secret key (correct)
   wrong_key: null     # LSS secret key (wrong - to evaluate detection with wrong encryption)
 
   #save audio options
