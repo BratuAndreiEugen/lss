@@ -240,6 +240,7 @@ class LatentSpinPCA:
         F = F.to(self.device)
 
         n, T = F.shape
+        frames_per_sec = 75.0
 
         P_cap = max(1, n // 2 - self.P0)
         P_eff = max(1, min(self.P_req, P_cap))
@@ -252,6 +253,7 @@ class LatentSpinPCA:
 
         s_total = torch.tensor(0.0, device=self.device)
         denom = torch.tensor(0.0, device=self.device)
+        subchunk_results = []
 
         bit_idx = 0
 
@@ -273,6 +275,10 @@ class LatentSpinPCA:
                 device=self.device
             ).sign()
 
+            sub_s = torch.zeros(self.L, device=self.device)
+            sub_denom = torch.zeros(self.L, device=self.device)
+            sub_bounds = []
+
             for p, (i, j) in enumerate(payload):
 
                 chips = chips_all[p]
@@ -286,6 +292,7 @@ class LatentSpinPCA:
                 Zi_windows = []
                 Zj_windows = []
                 lengths = []
+                cur_bounds = []
 
                 for ell in range(self.L):
 
@@ -301,9 +308,13 @@ class LatentSpinPCA:
                     Zi_windows.append(Zi)
                     Zj_windows.append(Zj)
                     lengths.append(ee - ss)
+                    cur_bounds.append((ell, ss, ee))
 
                 if not Zi_windows:
                     continue
+
+                if not sub_bounds:
+                    sub_bounds = cur_bounds
 
                 Zi_pad = torch.nn.utils.rnn.pad_sequence(Zi_windows, batch_first=True)
                 Zj_pad = torch.nn.utils.rnn.pad_sequence(Zj_windows, batch_first=True)
@@ -313,13 +324,31 @@ class LatentSpinPCA:
 
                 cov = torch.sum(Zi_pad * Zj_pad, dim=1)
 
-                s_total += beta * torch.sum(chips[:len(cov)] * cov)
+                signed_cov_per_ell = beta * chips[:len(cov)] * cov
+                lengths_t = torch.tensor(lengths, dtype=torch.float32, device=self.device)
 
+                sub_s[:len(cov)] += signed_cov_per_ell
+                sub_denom[:len(cov)] += lam_norm * lengths_t
+                
+                s_total += torch.sum(signed_cov_per_ell)
                 denom += lam_norm * sum(lengths)
 
                 bit_idx += 1
 
-        return float(s_total / torch.clamp(denom, min=1e-12))
+            for idx_k, (ell, ss, ee) in enumerate(sub_bounds):
+                    sc_score = float(sub_s[idx_k] / torch.clamp(sub_denom[idx_k], min=1e-12))
+                    subchunk_results.append({
+                        "chunk_idx": c,
+                        "subchunk_idx": ell,
+                        "start_frame": ss,
+                        "end_frame": ee,
+                        "start_sec": round(ss / frames_per_sec, 4),
+                        "end_sec": round(ee / frames_per_sec, 4),
+                        "score": sc_score
+                    })
+                    
+        total_score = float(s_total / torch.clamp(denom, min=1e-12))
+        return total_score, subchunk_results
 
     @torch.no_grad()
     def presence_score_from_waveform(self, enc: EncodecLatent_NEW, y_24k: torch.Tensor, file_id: str,
