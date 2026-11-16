@@ -278,24 +278,32 @@ def main():
             for i in range(B):
                 fid = batch_ids[i]
 
-                s_pos = lsp.presence_score_from_waveform(enc, wavs_target[i].unsqueeze(0), fid, bits)
+                s_pos, subchunks_pos = lsp.presence_score_from_waveform(enc, wavs_target[i].unsqueeze(0), fid, bits)
                 scores_pos.append(s_pos)
-                file_results.append({"fid": fid, "score": s_pos})
-
+                entry = {
+                    "fid": fid,
+                    "score": s_pos,
+                    "subchunks_pos": subchunks_pos,
+                    "score_neg": None,
+                    "subchunks_neg": None,
+                }
                 if has_refs[i]:
-                    s_neg = lsp.presence_score_from_waveform(enc, wavs_ref[i].unsqueeze(0), fid, bits)
+                    s_neg, subchunks_neg = lsp.presence_score_from_waveform(enc, wavs_ref[i].unsqueeze(0), fid, bits)
                     scores_neg.append(s_neg)
 
+                    entry["score_neg"] = s_neg
+                    entry["subchunks_neg"] = subchunks_neg
+
                     if lsp_wrong:
-                        scores_pos_w.append(
-                            lsp_wrong.presence_score_from_waveform(enc, wavs_target[i].unsqueeze(0), fid, bits))
-                        scores_neg_w.append(
-                            lsp_wrong.presence_score_from_waveform(enc, wavs_ref[i].unsqueeze(0), fid, bits))
+                        s_pos_w, subchunks_pos_w = lsp_wrong.presence_score_from_waveform(enc, wavs_target[i].unsqueeze(0), fid, bits)
+                        s_neg_w, subchunks_neg_w = lsp_wrong.presence_score_from_waveform(enc, wavs_ref[i].unsqueeze(0), fid, bits)
+                        scores_pos_w.append(s_pos_w)
+                        scores_neg_w.append(s_neg_w)
 
                     if compute_pesq and not math.isnan(scores_anc[i]) and not math.isnan(scores_tot[i]):
                         pesq_results.append({'file_id': fid, 'pesq_anchor': scores_anc[i], 'pesq_total': scores_tot[i],
                                              'lss_tax': scores_anc[i] - scores_tot[i]})
-
+                file_results.append(entry)
     # ---------------------------------------------------------
     # 7. METRIC COMPUTATION & CLASSIFICATION
     # ---------------------------------------------------------
@@ -329,13 +337,62 @@ def main():
         print("[WARN] Classification defaults to 0.0. Pass --threshold to set a specific boundary.")
         final_threshold = 0.0
 
-    print("\n" + "=" * 80)
-    print(f"{'Target Asset Filename':<40} | {'Score':<15} | {'Classification':<15}")
-    print("=" * 80)
+    # print("\n" + "=" * 80)
+    # print(f"{'Target Asset Filename':<40} | {'Score':<15} | {'Classification':<15}")
+    # print("=" * 80)
 
+    # for res in file_results:
+    #     classification = "WATERMARKED" if res['score'] >= final_threshold else "CLEAN"
+    #     print(f"{res['fid'] + '.wav':<40} | {res['score']:>15.6f} | {classification:<15}")
+
+    print("\n" + "=" * 110)
+    print(f"{'Target Asset Filename':<40} | {'Pos Score':<12} | {'Pos Class':<12} | {'Neg Score':<12} | {'Neg Class':<12}")
+    print("=" * 110)
     for res in file_results:
-        classification = "WATERMARKED" if res['score'] >= final_threshold else "CLEAN"
-        print(f"{res['fid'] + '.wav':<40} | {res['score']:>15.6f} | {classification:<15}")
+        pos_class = "WATERMARKED" if res['score'] >= final_threshold else "CLEAN"
+        if res['score_neg'] is not None:
+            neg_score_str = f"{res['score_neg']:>12.6f}"
+            neg_class = "WATERMARKED" if res['score_neg'] >= final_threshold else "CLEAN"
+        else:
+            neg_score_str = f"{'N/A':>12}"
+            neg_class = "N/A"
+        print(f"{res['fid'] + '.wav':<40} | {res['score']:>12.6f} | {pos_class:<12} | {neg_score_str} | {neg_class:<12}")
+    subchunk_json_path = os.path.join(results_dir, "subchunk_scores.json")
+    output_json = {
+        "threshold": float(final_threshold),
+        "total_files": len(file_results),
+        "files": [
+            {
+                "file_id": f"{res['fid']}.wav",
+                "pos_global_score": round(res["score"], 8),
+                "pos_global_classification": "WATERMARKED" if res["score"] >= final_threshold else "CLEAN",
+                "neg_global_score": round(res["score_neg"], 8) if res["score_neg"] is not None else None,
+                "neg_global_classification": (
+                    "WATERMARKED" if res["score_neg"] >= final_threshold else "CLEAN"
+                ) if res["score_neg"] is not None else None,
+                "subchunks_pos": [
+                    {
+                        **sc,
+                        "score": round(sc["score"], 8),
+                        "classification": "WATERMARKED" if sc["score"] >= final_threshold else "CLEAN"
+                    }
+                    for sc in res["subchunks_pos"]
+                ],
+                "subchunks_neg": [
+                    {
+                        **sc,
+                        "score": round(sc["score"], 8),
+                        "classification": "WATERMARKED" if sc["score"] >= final_threshold else "CLEAN"
+                    }
+                    for sc in res["subchunks_neg"]
+                ] if res["subchunks_neg"] is not None else None
+            }
+            for res in file_results
+        ]
+    }
+    with open(subchunk_json_path, "w", encoding="utf-8") as f:
+        json.dump(output_json, f, indent=4)
+    print(f"\n[SAVE] Wrote per-subchunk scores (pos & neg) to: {subchunk_json_path}")
 
 if __name__ == "__main__":
     main()

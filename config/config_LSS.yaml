@@ -26,7 +26,7 @@ encodec:
   target_bandwidth_kbps: 6.0
 
 pca_lss:
-  theta: 0.18     # radians
+  theta: 0.36     # radians
   payload_planes: 24
   pilots: 0
   m_frames: 32
