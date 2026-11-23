@@ -169,6 +169,11 @@ def main():
         "--sample_rate", type=int, default=24000,
         help="Audio sample rate used to compute sample coordinates (default: 24000)"
     )
+    arg_parser.add_argument(
+        "--ignore_last_chunk",
+        action="store_true",
+        help="Ignore all subchunks belonging to the last chunk of each file"
+    )
 
     args = arg_parser.parse_args()
 
@@ -274,6 +279,11 @@ def main():
                 upper_val = file_stats[upper_col]
 
                 subchunks = file_entry.get(subchunk_field) or []
+                if args.ignore_last_chunk or parser_cfg.get("ignore_last_chunk", False):
+                    if subchunks:
+                        last_chunk_idx = max(sc["chunk_idx"] for sc in subchunks)
+                        subchunks = [sc for sc in subchunks if sc["chunk_idx"] < last_chunk_idx]
+
                 regions = extract_merged_regions(
                     subchunks=subchunks,
                     lower_val=lower_val,

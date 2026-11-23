@@ -63,14 +63,25 @@ def load_theta_jsons_from_config(config_path):
     return found, config
 
 
-def load_files_by_id(json_path):
+def load_files_by_id(json_path, ignore_last_chunk=False):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     by_id = {}
     for item in data.get("files", []):
         fid = item["file_id"]
-        pos_scores = np.array([sc["score"] for sc in (item.get("subchunks_pos") or [])], dtype=float)
-        neg_scores = np.array([sc["score"] for sc in (item.get("subchunks_neg") or [])], dtype=float)
+        sub_pos = item.get("subchunks_pos") or []
+        sub_neg = item.get("subchunks_neg") or []
+
+        if ignore_last_chunk:
+            if sub_pos:
+                last_chunk_pos = max(sc["chunk_idx"] for sc in sub_pos)
+                sub_pos = [sc for sc in sub_pos if sc["chunk_idx"] < last_chunk_pos]
+            if sub_neg:
+                last_chunk_neg = max(sc["chunk_idx"] for sc in sub_neg)
+                sub_neg = [sc for sc in sub_neg if sc["chunk_idx"] < last_chunk_neg]
+
+        pos_scores = np.array([sc["score"] for sc in sub_pos], dtype=float)
+        neg_scores = np.array([sc["score"] for sc in sub_neg], dtype=float)
         by_id[fid] = {
             "not_tampered": neg_scores,   # -c: watermarked & not-tampered
             "tampered": pos_scores,       # -i: watermarked & tampered (spliced)
@@ -80,7 +91,7 @@ def load_files_by_id(json_path):
 
 def compute_stats(scores):
     if scores is None or len(scores) == 0:
-        return [None, None, None, None, None, None, None]
+        return [None] * 13
     p5, p10, p15, p20, p25, p50, p75, p80, p85, p90, p95 = np.percentile(scores, [5, 10, 15, 20, 25, 50, 75, 80, 85, 90, 95])
     mean_val = np.mean(scores)
     std_val = np.std(scores)
@@ -101,13 +112,13 @@ def compute_stats(scores):
     ]
 
 
-def export_stats_csv_from_config(config_path, output_csv=None):
+def export_stats_csv_from_config(config_path, output_csv=None, ignore_last_chunk=False):
     theta_jsons, config = load_theta_jsons_from_config(config_path)
 
     datasets = {}
     all_file_ids = []
     for theta_label, jpath in theta_jsons:
-        datasets[theta_label] = load_files_by_id(jpath)
+        datasets[theta_label] = load_files_by_id(jpath, ignore_last_chunk=ignore_last_chunk)
         for fid in datasets[theta_label]:
             if fid not in all_file_ids:
                 all_file_ids.append(fid)
@@ -177,13 +188,22 @@ def main():
         default=None,
         help="Output CSV file path (overrides config or default location)"
     )
+    parser.add_argument(
+        "--ignore_last_chunk",
+        action="store_true",
+        help="Ignore all subchunks belonging to the last chunk of each file"
+    )
     args = parser.parse_args()
 
     if not os.path.isfile(args.config):
         print(f"[ERROR] Configuration file not found: {args.config}")
         sys.exit(1)
 
-    out_csv, header, rows = export_stats_csv_from_config(args.config, args.output_csv)
+    out_csv, header, rows = export_stats_csv_from_config(
+        args.config,
+        args.output_csv,
+        ignore_last_chunk=args.ignore_last_chunk,
+    )
     print(f"[DONE] Wrote {len(rows)} file rows ({len(header)} columns) to: {out_csv}")
 
 

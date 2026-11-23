@@ -86,6 +86,11 @@ def main():
         action="store_true",
         help="Plot smooth KDE distribution curves only without background histogram bars"
     )
+    parser.add_argument(
+        "--ignore_last_chunk",
+        action="store_true",
+        help="Ignore all subchunks belonging to the last chunk of each file"
+    )
 
     args = parser.parse_args()
 
@@ -100,7 +105,7 @@ def main():
     all_file_ids = []
     for theta_label, jpath in theta_jsons:
         print(f"  - θ = {theta_label}: {jpath}")
-        datasets[theta_label] = load_files_by_id(jpath)
+        datasets[theta_label] = load_files_by_id(jpath, ignore_last_chunk=args.ignore_last_chunk)
         for fid in datasets[theta_label]:
             if fid not in all_file_ids:
                 all_file_ids.append(fid)
@@ -165,7 +170,7 @@ def main():
     print(f"[DONE] Saved {len(all_file_ids)} distribution plots to '{out_dir}'.")
 
     csv_path = os.path.join(out_dir, "distribution_stats.csv")
-    export_stats_csv_from_config(args.config, csv_path)
+    export_stats_csv_from_config(args.config, csv_path, ignore_last_chunk=args.ignore_last_chunk)
     print(f"[DONE] Saved summary statistics CSV to '{csv_path}'.")
 
 
