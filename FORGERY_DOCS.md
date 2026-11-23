@@ -206,3 +206,7 @@ parser:
 ```bash
 ./plot_anomaly_regions.py --output_dir "../1s_random_splicing/anomaly_region_plots" --min_duration_ms 500
 ```
+
+### Fourth Iteration
+
+A step-by-step execution of this iteration is found under `iteration4/pipeline.ipynb`. The pipeline is detailed in a diagram as well (the `docs` folder)

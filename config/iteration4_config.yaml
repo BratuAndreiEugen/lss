@@ -1,0 +1,6 @@
+scaler:
+  original_dataset_path: "../../test_dataset"
+  
+general:
+  pca_load_dir: "../../checkpoints/PCA_20261105_1527_1337_25000.pt"
+  output_path: "../../iteration4_files"
