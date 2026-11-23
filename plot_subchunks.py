@@ -63,6 +63,11 @@ def main():
         default=None,
         help="Optional threshold override (defaults to threshold saved in subchunk_scores.json)"
     )
+    parser.add_argument(
+        "--ignore_last_chunk",
+        action="store_true",
+        help="Ignore all subchunks belonging to the last chunk of each file"
+    )
 
     args = parser.parse_args()
 
@@ -94,6 +99,14 @@ def main():
 
         sub_pos = entry.get("subchunks_pos") or []
         sub_neg = entry.get("subchunks_neg") or []
+
+        if args.ignore_last_chunk:
+            if sub_pos:
+                last_chunk_pos = max(sc["chunk_idx"] for sc in sub_pos)
+                sub_pos = [sc for sc in sub_pos if sc["chunk_idx"] < last_chunk_pos]
+            if sub_neg:
+                last_chunk_neg = max(sc["chunk_idx"] for sc in sub_neg)
+                sub_neg = [sc for sc in sub_neg if sc["chunk_idx"] < last_chunk_neg]
 
         if not sub_pos:
             continue
