@@ -1,0 +1,16 @@
+detection:
+  0_18:
+    subchunk_scores_path: "../1s_random_splicing/0.18_post_splice_detection/subchunk_scores.json"
+  0_36:
+    subchunk_scores_path: "../1s_random_splicing/0.36_post_splice_detection/subchunk_scores.json"
+
+parser:
+  lower_limit: 25 # 25th percentile
+  upper_limit: 75 # 75th percentile
+  0_18:
+    watermarked_files_path: "../0.18_watermarked_test_dataset/"
+    tampered_files_path: "../1s_random_splicing/0.18_spliced_watermarked_test_dataset/"
+  0_36:
+    watermarked_files_path: "../0.36_watermarked_test_dataset/"
+    tampered_files_path: "../1s_random_splicing/0.36_spliced_watermarked_test_dataset"
+  csv_path: "../1s_random_splicing/statistics/distribution_stats.csv"

@@ -60,7 +60,7 @@ The following was done for each file in the picked dataset:
 ```
 * Run detection again on the tampered recordings:
 ```bash
-./LSS_detection.py -i "../1s_random_splicing/0.18_spliced_watermarked_test_dataset" -c "../test_dataset" --pca_load_dir "../checkpoints/PCA_20261105_1527_1337_25000.pt" -r "../1s_random_splicing/0.18_post_splice_detection" --compute_pesq false
+./LSS_detection.py -i "../1s_random_splicing/0.18_spliced_watermarked_test_dataset" -c "../0.18_watermarked_test_dataset" --pca_load_dir "../checkpoints/PCA_20261105_1527_1337_25000.pt" -r "../1s_random_splicing/0.18_post_splice_detection" --compute_pesq false
 ```
 ***96%** of the recordings are classified as `WATERMARKED`*
 
@@ -84,7 +84,7 @@ The following was done for each file in the picked dataset:
 ```
 * Run detection again on the tampered recordings:
 ```bash
-./LSS_detection.py -i "../1s_random_splicing/0.36_spliced_watermarked_test_dataset" -c "../test_dataset" --pca_load_dir "../checkpoints/PCA_20261105_1527_1337_25000.pt" -r "../1s_random_splicing/0.36_post_splice_detection" --compute_pesq false
+./LSS_detection.py -i "../1s_random_splicing/0.36_spliced_watermarked_test_dataset" -c "../0.36_watermarked_test_dataset" --pca_load_dir "../checkpoints/PCA_20261105_1527_1337_25000.pt" -r "../1s_random_splicing/0.36_post_splice_detection" --compute_pesq false
 ```
 ***99.50%** of the recordings are classified as `WATERMARKED`*
 
@@ -160,3 +160,49 @@ The following was done for each file in the picked dataset:
     ./plot_subchunks "../1s_random_splicing/iteration2_files/0.36_granular_detection_output/subchunk_scores.json" -o "../1s_random_splicing/iteration2_files/0.36_granular_detection_output/plots" -m "../1s_random_splicing/0.36_spliced_watermarked_test_dataset/metadata.json"   
     ```
 * The plots for both these runs are found in `plots/0.18_plots` & `plots/0.36_plots` respectively.
+
+### Third Iteration
+
+#### Distribution Plots
+
+We wrote a new script that for each of the 5 files from the previous iteration outputs a exhaustive distribution plot for the watermarked audio and tampered audio (for both theta equals 0.18 and 0.36 on the same plot)
+* Run:
+```bash
+./plot_distributions.py --output_dir "./plots/1s_random_splicing/distribution_plots"
+```
+
+#### Anomaly Detection Pipeline
+
+* We extract distribution statistics for each file in both watermarked and tampered format (with both theta equals 0.18 and 0.36)
+```bash
+./export_distribution_stats.py --config "./config/anomaly_pipeline_config.yaml" --output_csv "../1s_random_splicing/statistics/distribution_stats.csv" 
+```
+* We parse the scores of each file from our dataset from the detection output, and we extract continuous sections of subchunks that are all either below the file's lower percentile (can be tweaked in `anomaly_pipeline_config.yaml` or can pe passed as command argument) or above the file's upper percentile (can also be tweaked the same way).
+```yaml
+parser:
+  lower_limit: 25 # 25th percentile
+  upper_limit: 75 # 75th percentile
+  0_18:
+    watermarked_files_path: "../0.18_watermarked_test_dataset/"
+    tampered_files_path: "../1s_random_splicing/0.18_spliced_watermarked_test_dataset/"
+  0_36:
+    watermarked_files_path: "../0.36_watermarked_test_dataset/"
+    tampered_files_path: "../1s_random_splicing/0.36_spliced_watermarked_test_dataset"
+  csv_path: "../1s_random_splicing/statistics/distribution_stats.csv"
+```
+```bash
+./parse_anomaly_regions.py
+```
+
+* We also apply a length filter on all the regions discovered above and we concatenate then into contiguous wav files:
+    * Sections that are above the upper percentile in one file
+    * Sections that are below the lower percentile in another
+```bash
+./extract_long_anomaly_audio.py -o "../1s_random_splicing/extracted_long_regions" --min_duration_ms 400
+```
+* For each of the concatenated files we also plot their scores (*This is done in the script above*)
+
+* Finally, we plot the scores of the files that contain the anomalies and we highlight the anomaly regions.
+```bash
+./plot_anomaly_regions.py --output_dir "../1s_random_splicing/anomaly_region_plots" --min_duration_ms 500
+```
